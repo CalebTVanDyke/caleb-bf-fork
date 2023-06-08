@@ -5,7 +5,9 @@ import dataclasses
 import logging
 from typing import Iterable, List
 
+from fastapi import FastAPI
 import ray
+from ray import serve
 from ray.util.metrics import Gauge
 
 from buildflow import utils
@@ -156,3 +158,17 @@ class RuntimeActor(RuntimeAPI):
 
             # TODO: Add more control / configuration around the checkin loop
             await asyncio.sleep(30)
+
+
+app = FastAPI()
+
+
+@serve.deployment(route_prefix="/", ray_actor_options={"num_cpus": 0.1})
+@serve.ingress(app)
+class RuntimeMonitor:
+    def __init__(self, runtime_actor: RuntimeActor) -> None:
+        self.runtime_actor = runtime_actor
+
+    @app.get("/")
+    async def snapshot(self):
+        return await self.runtime_actor.snapshot.remote()

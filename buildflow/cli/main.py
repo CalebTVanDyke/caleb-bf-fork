@@ -37,6 +37,11 @@ def run(
     destroy_infrastructure: bool = typer.Option(
         False, help="Whether resources should be destroyed."
     ),
+    include_monitor: bool = typer.Option(
+        False, help="Whether to include a monitor for the running node."
+    ),
+    montior_host: str = typer.Option("127.0.0.1", help="The monitor host."),
+    monitor_port: int = typer.Option(9653, help="The monitor port."),
     app_dir: str = APP_DIR_OPTION,
 ):
     sys.path.insert(0, app_dir)
@@ -46,6 +51,9 @@ def run(
             disable_usage_stats=disable_usage_stats,
             apply_infrastructure=apply_infrastructure,
             destroy_infrastructure=destroy_infrastructure,
+            include_monitor=include_monitor,
+            montior_host=montior_host,
+            monitor_port=monitor_port,
         )
     else:
         typer.echo(f"{app} is not a buildflow node.")

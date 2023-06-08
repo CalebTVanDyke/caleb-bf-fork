@@ -5,6 +5,8 @@ from functools import wraps
 import inspect
 from typing import List, Optional
 
+from ray import serve
+
 from buildflow import utils
 from buildflow.api import (
     NodeAPI,
@@ -18,7 +20,7 @@ from buildflow.api import (
 from buildflow.core.infra import PulumiInfraActor
 from buildflow.core.infra.config import InfraConfig
 from buildflow.core.processor import Processor
-from buildflow.core.runtime import RuntimeActor
+from buildflow.core.runtime import RuntimeActor, RuntimeMonitor
 from buildflow.core.runtime.config import RuntimeConfig, ReplicaConfig
 from buildflow.io.registry import EmptySink
 
@@ -157,12 +159,19 @@ class Node(NodeAPI):
         # infra-only options
         apply_infrastructure: bool = False,
         destroy_infrastructure: bool = False,
+        # monitor options
+        include_monitor: bool = False,
+        montior_host: str = "127.0.0.1",
+        monitor_port: int = 9653,
     ):
         coro = self._run_async(
             disable_usage_stats=disable_usage_stats,
             apply_infrastructure=apply_infrastructure,
             destroy_infrastructure=destroy_infrastructure,
             debug_run=debug_run,
+            include_monitor=include_monitor,
+            montior_host=montior_host,
+            monitor_port=monitor_port,
         )
         if block_runtime:
             asyncio.get_event_loop().run_until_complete(coro)
@@ -176,8 +185,21 @@ class Node(NodeAPI):
         apply_infrastructure: bool = False,
         destroy_infrastructure: bool = False,
         debug_run: bool = False,
+        include_monitor: bool,
+        montior_host: str,
+        monitor_port: int,
     ):
         self._runtime_actor = RuntimeActor.remote(self._runtime_config)
+
+        if include_monitor:
+            _runtime_monitor = RuntimeMonitor.bind(self._runtime_actor)
+            serve.run(_runtime_monitor, host=montior_host, port=monitor_port)
+            print("--------------------------------------------------------\n\n")
+            print(
+                f"Runtime Monitor running at http://{montior_host}:{monitor_port}\n\n"
+            )
+            print("--------------------------------------------------------\n\n")
+
         # BuildFlow Usage Stats
         if not disable_usage_stats:
             utils.log_buildflow_usage()
@@ -205,6 +227,7 @@ class Node(NodeAPI):
             # schedule the destroy to run after the runtime is done.
             # NOTE: This will only run if the runtime finishes successfully.
             runtime_future.add_done_callback(lambda _: self._destroy_async())
+
         return await remote_runtime_task
 
     async def _drain(self, destroy: bool = False):
